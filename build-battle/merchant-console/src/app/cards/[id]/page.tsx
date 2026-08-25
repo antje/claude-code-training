@@ -26,7 +26,7 @@ const STATUSES: Record<CardStatus, string> = {
   cancelled: "Cancelled",
 }
 
-/** Past this share of the limit the bar turns amber. */
+/** Past this share the bar turns amber. */
 const WARN_AT = 0.8
 
 export default async function CardDetailPage({
@@ -101,9 +101,7 @@ export default async function CardDetailPage({
               </span>
             </p>
           </div>
-          <p className={cx("text-sm font-medium tabular-nums", tone.text)}>
-            {percent}%
-          </p>
+          <p className={cx("text-sm font-medium tabular-nums", tone.text)}>{percent}%</p>
         </div>
 
         <div
@@ -131,8 +129,8 @@ export default async function CardDetailPage({
         ) : null}
 
         <p className="mt-2 text-xs text-gray-500">
-          Spend is this merchant&rsquo;s captured {card.currency} volume. Cards
-          carry their own transactions from NWP-203.
+          Spend is this merchant&rsquo;s captured {card.currency} volume. Cards carry
+          their own transactions from NWP-203.
         </p>
       </div>
 
@@ -153,35 +151,29 @@ export default async function CardDetailPage({
       </dl>
 
       <section className="mt-8" aria-label="Status history">
-        <h2 className="text-sm font-medium text-gray-900 dark:text-gray-50">
-          History
-        </h2>
+        <h2 className="text-sm font-medium text-gray-900 dark:text-gray-50">History</h2>
         <p className="mt-0.5 text-sm text-gray-500">
           Every status this card has held. Append-only — nothing is rewritten.
         </p>
         <ol className="mt-3 border-l border-gray-200 dark:border-gray-800">
-          {[...card.history].reverse().map((event, i) => (
-            <li key={`${event.at}-${i}`} className="relative py-2 pl-5 text-sm">
+          {[...card.history].reverse().map((e, i) => (
+            <li key={`${e.at}-${i}`} className="relative py-2 pl-5 text-sm">
               <span
                 className="absolute -left-[3px] top-3.5 size-1.5 rounded-full bg-gray-400 dark:bg-gray-600"
                 aria-hidden="true"
               />
               <span className="text-gray-900 dark:text-gray-50">
-                {event.from === null
-                  ? "Issued"
-                  : `${STATUSES[event.from]} → ${STATUSES[event.to]}`}
+                {e.from === null ? "Issued" : `${STATUSES[e.from]} → ${STATUSES[e.to]}`}
               </span>
-              <span className="ml-2 text-gray-500">
-                {formatInZone(event.at, zone)}
-              </span>
+              <span className="ml-2 text-gray-500">{formatInZone(e.at, zone)}</span>
             </li>
           ))}
         </ol>
       </section>
 
       <p className="mt-6 text-xs text-gray-500">
-        The full number was shown once, when this card was issued. It is not
-        stored and cannot be retrieved.
+        The full number was shown once, when this card was issued. It is not stored
+        and cannot be retrieved.
       </p>
     </section>
   )

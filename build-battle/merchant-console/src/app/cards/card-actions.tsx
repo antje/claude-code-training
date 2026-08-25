@@ -7,13 +7,10 @@ import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
 /**
- * Freeze, unfreeze and cancel a card in place.
- *
- * `router.refresh()` re-renders the server component with fresh data without a
- * full page reload, so the row updates where it stands. The server still guards
- * every transition — this only decides which buttons to show.
- *
- * Cancel asks first, because `cancelled` is terminal and there is no undo.
+ * Freeze, unfreeze and cancel in place: `router.refresh()` re-renders the
+ * server component without a full reload. The server still guards every
+ * transition; this only decides which buttons show. Cancel asks first, because
+ * `cancelled` is terminal.
  */
 export function CardActions({
   id,
@@ -30,7 +27,7 @@ export function CardActions({
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
 
-  // Cancelled is terminal, so there is nothing to offer.
+  // Terminal: nothing to offer.
   if (status === "cancelled") {
     return compact ? null : (
       <span className="text-sm text-gray-500">No actions — cancelled</span>
@@ -89,7 +86,7 @@ export function CardActions({
   }
 
   const thaw = status === "frozen"
-  const FreezeIcon = thaw ? Sun : Snowflake
+  const Icon = thaw ? Sun : Snowflake
 
   return (
     <div className="flex items-center gap-2">
@@ -100,10 +97,9 @@ export function CardActions({
         disabled={working}
         aria-label={`${thaw ? "Unfreeze" : "Freeze"} card ${id}`}
       >
-        <FreezeIcon className="-ml-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        <Icon className="-ml-0.5 size-3.5 shrink-0" aria-hidden="true" />
         {working ? "Working…" : thaw ? "Unfreeze" : "Freeze"}
       </Button>
-
       <Button
         variant="secondary"
         className="gap-1.5 py-1"
@@ -114,7 +110,6 @@ export function CardActions({
         <Ban className="-ml-0.5 size-3.5 shrink-0" aria-hidden="true" />
         Cancel
       </Button>
-
       {error && (
         <span
           className="flex items-center gap-1 text-xs text-red-600 dark:text-red-500"

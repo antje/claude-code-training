@@ -4,11 +4,8 @@ import { CardStatus } from "@/data/types"
 import { NextRequest, NextResponse } from "next/server"
 
 /**
- * A single card.
- *
- * GET   — the stored record. `last4` only; the full number is not here.
- * PATCH — a status change, with the state machine guarded server-side. The UI
- *         hides illegal buttons, but this is the enforcement.
+ * GET   — the stored record, `last4` only.
+ * PATCH — a status change, with the machine guarded server-side.
  */
 
 export async function GET(
@@ -49,7 +46,7 @@ export async function PATCH(
 
   const result = setCardStatus(id, status as CardStatus)
   if (!result.ok) {
-    // 404 for a card that is not there; 409 for a transition the machine forbids.
+    // 404 if absent; 409 if the machine forbids the move.
     return NextResponse.json(
       { message: result.message },
       { status: result.reason === "not_found" ? 404 : 409 },

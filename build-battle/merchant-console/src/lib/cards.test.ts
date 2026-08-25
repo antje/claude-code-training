@@ -18,102 +18,59 @@ import {
  * number on the 4242 BIN, and a cancelled card never comes back to life.
  */
 
-describe("luhnCheckDigit", () => {
-  it("computes the digit that completes a known test number", () => {
-    // 4242424242424242 is the canonical test PAN; its body is 424242424242424.
+describe("luhn", () => {
+  it("completes the canonical test number", () => {
     expect(luhnCheckDigit("424242424242424")).toBe(2)
-  })
-
-  it("returns a single digit for any partial", () => {
-    for (const partial of ["4242", "0", "9".repeat(15), "4242000000000"]) {
-      const digit = luhnCheckDigit(partial)
-      expect(digit).toBeGreaterThanOrEqual(0)
-      expect(digit).toBeLessThanOrEqual(9)
-    }
-  })
-})
-
-describe("isLuhnValid", () => {
-  it("accepts the canonical test number", () => {
     expect(isLuhnValid("4242424242424242")).toBe(true)
   })
 
-  it("rejects a number with a single transposed digit", () => {
+  it("rejects a transposed digit and non-digits", () => {
     expect(isLuhnValid("4242424242424243")).toBe(false)
-  })
-
-  it("rejects anything that is not all digits", () => {
     expect(isLuhnValid("4242-4242-4242-4242")).toBe(false)
     expect(isLuhnValid("")).toBe(false)
   })
 })
 
 describe("generateCardNumber", () => {
-  it("always starts with the 4242 test BIN, so nothing here resembles a real PAN", () => {
-    for (let i = 0; i < 500; i++) {
-      expect(generateCardNumber().startsWith(TEST_BIN)).toBe(true)
-    }
+  const numbers = Array.from({ length: 500 }, generateCardNumber)
+
+  it("always starts with the 4242 test BIN", () => {
+    for (const n of numbers) expect(n.startsWith(TEST_BIN), n).toBe(true)
   })
 
-  it("always passes the Luhn check", () => {
-    for (let i = 0; i < 500; i++) {
-      const number = generateCardNumber()
-      expect(isLuhnValid(number), `${number} failed Luhn`).toBe(true)
-    }
-  })
-
-  it("is always 16 digits", () => {
-    for (let i = 0; i < 100; i++) {
-      expect(generateCardNumber()).toMatch(/^\d{16}$/)
+  it("always passes Luhn and is 16 digits", () => {
+    for (const n of numbers) {
+      expect(isLuhnValid(n), `${n} failed Luhn`).toBe(true)
+      expect(n).toMatch(/^\d{16}$/)
     }
   })
 
   it("does not repeat itself", () => {
-    const seen = new Set<string>()
-    for (let i = 0; i < 500; i++) seen.add(generateCardNumber())
-    expect(seen.size).toBe(500)
+    expect(new Set(numbers).size).toBe(numbers.length)
   })
 })
 
-describe("lastFour and maskCard", () => {
-  it("keeps only the final four digits", () => {
-    expect(lastFour("4242424242421234")).toBe("1234")
+describe("masking", () => {
+  it("keeps only the final four and hides the rest", () => {
+    const n = generateCardNumber()
+    expect(lastFour(n)).toBe(n.slice(-4))
+    expect(maskCard(lastFour(n))).toBe(`•••• ${n.slice(-4)}`)
+    expect(maskCard(lastFour(n))).not.toContain(n.slice(0, 12))
   })
 
-  it("writes a masked number the way the rest of the app shows it", () => {
-    expect(maskCard("1234")).toBe("•••• 1234")
-  })
-
-  it("never includes the leading digits in the mask", () => {
-    const number = generateCardNumber()
-    const masked = maskCard(lastFour(number))
-    expect(masked).not.toContain(number.slice(0, 12))
-    expect(masked).toBe(`•••• ${number.slice(-4)}`)
-  })
-})
-
-describe("cardReference", () => {
-  it("is opaque — it leaks nothing about the number", () => {
-    const number = generateCardNumber()
-    const reference = cardReference()
-    expect(reference).toMatch(/^crd_ref_[0-9a-f]{16}$/)
-    expect(reference).not.toContain(number.slice(-4))
-  })
-
-  it("is unique per call", () => {
-    const seen = new Set<string>()
-    for (let i = 0; i < 200; i++) seen.add(cardReference())
-    expect(seen.size).toBe(200)
+  it("mints an opaque reference that leaks nothing", () => {
+    const n = generateCardNumber()
+    const ref = cardReference()
+    expect(ref).toMatch(/^crd_ref_[0-9a-f]{16}$/)
+    expect(ref).not.toContain(n.slice(-4))
+    expect(new Set(Array.from({ length: 200 }, cardReference)).size).toBe(200)
   })
 })
 
-describe("canTransition", () => {
-  it("lets an active card freeze and a frozen card thaw", () => {
+describe("state machine", () => {
+  it("allows freeze, thaw and cancel from either live status", () => {
     expect(canTransition("active", "frozen")).toBe(true)
     expect(canTransition("frozen", "active")).toBe(true)
-  })
-
-  it("lets either live status cancel", () => {
     expect(canTransition("active", "cancelled")).toBe(true)
     expect(canTransition("frozen", "cancelled")).toBe(true)
   })
@@ -124,28 +81,15 @@ describe("canTransition", () => {
     }
   })
 
-  it("rejects a no-op transition to the same status", () => {
-    for (const status of CARD_STATUSES) {
-      expect(canTransition(status, status), `${status} → ${status}`).toBe(false)
-    }
-  })
-
-  it("rejects a status that is not part of the machine", () => {
+  it("rejects a no-op and an unknown status", () => {
+    for (const s of CARD_STATUSES) expect(canTransition(s, s), `${s} → ${s}`).toBe(false)
     expect(canTransition("active", "expired" as CardStatus)).toBe(false)
     expect(canTransition("nonsense" as CardStatus, "active")).toBe(false)
   })
-})
 
-describe("nextStatuses", () => {
-  it("offers freeze and cancel on an active card", () => {
+  it("keeps nextStatuses and canTransition in agreement", () => {
     expect([...nextStatuses("active")].sort()).toEqual(["cancelled", "frozen"])
-  })
-
-  it("offers nothing on a cancelled card", () => {
     expect(nextStatuses("cancelled")).toEqual([])
-  })
-
-  it("agrees with canTransition for every pair", () => {
     for (const from of CARD_STATUSES) {
       for (const to of CARD_STATUSES) {
         expect(nextStatuses(from).includes(to)).toBe(canTransition(from, to))

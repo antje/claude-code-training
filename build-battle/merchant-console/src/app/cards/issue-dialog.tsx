@@ -27,16 +27,14 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 
 /**
- * Issue a virtual card, then reveal its number exactly once.
- *
- * The number lives in this component's state only while the success panel is
- * open and is dropped when it closes. It is never written anywhere else and
- * cannot be fetched back — the card record has no field for it.
+ * Issue a card, then reveal its number exactly once. The number lives in state
+ * only while the success panel is open and is dropped on close; the record has
+ * no field for it, so it cannot be fetched back.
  */
 
 const CURRENCIES: Currency[] = ["USD", "EUR", "GBP"]
 
-const CATEGORY_LABELS: Record<MerchantCategory, string> = {
+const CATEGORIES: Record<MerchantCategory, string> = {
   any: "Any category",
   advertising: "Advertising",
   software: "Software",
@@ -44,9 +42,15 @@ const CATEGORY_LABELS: Record<MerchantCategory, string> = {
   contractors: "Contractors",
 }
 
-type Errors = Record<string, string>
+const EMPTY = {
+  nickname: "",
+  merchantId: "",
+  limit: "",
+  currency: "USD" as Currency,
+  category: "any" as MerchantCategory,
+}
 
-/** A labelled control with its own error slot, so every input has a label. */
+/** A labelled control with its own error slot. */
 function Field({
   id,
   label,
@@ -62,10 +66,7 @@ function Field({
 }) {
   return (
     <div>
-      <label
-        htmlFor={id}
-        className="text-sm font-medium text-gray-900 dark:text-gray-50"
-      >
+      <label htmlFor={id} className="text-sm font-medium text-gray-900 dark:text-gray-50">
         {label}
       </label>
       <div className="mt-1.5">{children}</div>
@@ -80,6 +81,46 @@ function Field({
   )
 }
 
+/** A labelled Select, since three of the four controls are one. */
+function Choice({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+  error,
+  hint,
+  disabled,
+  placeholder,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: [string, string][]
+  error?: string
+  hint?: string
+  disabled?: boolean
+  placeholder?: string
+}) {
+  return (
+    <Field id={id} label={label} error={error} hint={hint}>
+      <Select value={value} onValueChange={onChange} disabled={disabled}>
+        <SelectTrigger id={id} className="w-full py-1.5" hasError={Boolean(error)}>
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map(([v, label]) => (
+            <SelectItem key={v} value={v}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  )
+}
+
 export function IssueCardDialog({
   merchants,
 }: {
@@ -88,25 +129,13 @@ export function IssueCardDialog({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState({
-    nickname: "",
-    merchantId: "",
-    limit: "",
-    currency: "USD" as Currency,
-    category: "any" as MerchantCategory,
-  })
-  const [errors, setErrors] = useState<Errors>({})
+  const [form, setForm] = useState(EMPTY)
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
-  const [issued, setIssued] = useState<{ card: Card; fullNumber: string } | null>(
-    null,
-  )
+  const [issued, setIssued] = useState<{ card: Card; fullNumber: string } | null>(null)
   const [copied, setCopied] = useState(false)
 
-  /**
-   * One key per attempt, minted when the panel opens. A double-click or a retry
-   * on a slow connection reuses it, so the server returns the card already
-   * issued rather than minting a second one.
-   */
+  /** One key per attempt: a double-click or retry reuses it, so no second card. */
   const [key, setKey] = useState(() => globalThis.crypto.randomUUID())
 
   const set = (patch: Partial<typeof form>) =>
@@ -114,18 +143,9 @@ export function IssueCardDialog({
 
   const onOpenChange = (next: boolean) => {
     setOpen(next)
-    if (next) {
-      setKey(globalThis.crypto.randomUUID())
-      return
-    }
-    // Closing drops the full number from client state. It is not recoverable.
-    setForm({
-      nickname: "",
-      merchantId: "",
-      limit: "",
-      currency: "USD",
-      category: "any",
-    })
+    if (next) return setKey(globalThis.crypto.randomUUID())
+    // Closing drops the number from client state. Not recoverable.
+    setForm(EMPTY)
     setErrors({})
     setFormError(null)
     setIssued(null)
@@ -144,7 +164,7 @@ export function IssueCardDialog({
     setErrors({})
     setFormError(null)
 
-    // Convert at the boundary, once, with the helper that already exists.
+    // Convert once, at the boundary, with the existing helper.
     const spendLimit = parseAmountToMinorUnits(form.limit)
     if (spendLimit === null) {
       setErrors({ limit: "Enter an amount like 250 or 250.00." })
@@ -161,17 +181,18 @@ export function IssueCardDialog({
       const payload = await response.json()
 
       if (!response.ok) {
-        // The server is the enforcement; show exactly what it objected to.
-        const next: Errors = {}
+        // The server is the enforcement; show what it objected to.
+        const next: Record<string, string> = {}
         for (const e of payload.errors ?? [])
           next[e.field === "spendLimit" ? "limit" : e.field] = e.message
         setErrors(next)
-        if (!payload.errors?.length) setFormError(payload.message ?? "Could not issue the card.")
+        if (!payload.errors?.length)
+          setFormError(payload.message ?? "Could not issue the card.")
         return
       }
 
       if (payload.alreadyIssued) {
-        // A retry of this same attempt. The number is not replayed.
+        // A retry. The number is not replayed.
         setFormError(
           `Already issued as ${payload.card.nickname} (•••• ${payload.card.last4}). The full number was shown then and cannot be shown again.`,
         )
@@ -213,12 +234,10 @@ export function IssueCardDialog({
                   This is the only time the full number is shown
                 </p>
                 <p className="mt-1 text-sm text-amber-900/80 dark:text-amber-500/80">
-                  It is not stored and cannot be looked up again. Copy it now if
-                  you need it — everywhere else this card is ••••{" "}
-                  {issued.card.last4}.
+                  It is not stored and cannot be looked up again. Copy it now if you
+                  need it — everywhere else this card is •••• {issued.card.last4}.
                 </p>
               </div>
-
               <div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-900">
                 <span className="font-mono text-lg tabular-nums tracking-wide text-gray-900 dark:text-gray-50">
                   {issued.fullNumber.replace(/(\d{4})(?=\d)/g, "$1 ")}
@@ -251,8 +270,7 @@ export function IssueCardDialog({
             <DrawerHeader>
               <DrawerTitle>Issue a virtual card</DrawerTitle>
               <DrawerDescription className="text-sm">
-                Single merchant, virtual, with a spend limit from the moment it
-                exists.
+                Single merchant, virtual, with a spend limit from the moment it exists.
               </DrawerDescription>
             </DrawerHeader>
 
@@ -267,24 +285,15 @@ export function IssueCardDialog({
                 />
               </Field>
 
-              <Field id="card-merchant" label="Merchant" error={errors.merchantId}>
-                <Select value={form.merchantId} onValueChange={onMerchant}>
-                  <SelectTrigger
-                    id="card-merchant"
-                    className="w-full py-1.5"
-                    hasError={Boolean(errors.merchantId)}
-                  >
-                    <SelectValue placeholder="Choose a merchant" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {merchants.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
+              <Choice
+                id="card-merchant"
+                label="Merchant"
+                value={form.merchantId}
+                onChange={onMerchant}
+                options={merchants.map((m) => [m.id, m.name])}
+                error={errors.merchantId}
+                placeholder="Choose a merchant"
+              />
 
               <div className="flex gap-3">
                 <div className="flex-1">
@@ -300,65 +309,33 @@ export function IssueCardDialog({
                   </Field>
                 </div>
                 <div className="w-32">
-                  <Field
+                  <Choice
                     id="card-currency"
                     label="Currency"
+                    value={form.currency}
+                    onChange={(v) => set({ currency: v as Currency })}
+                    options={CURRENCIES.map((c) => [c, c])}
                     error={errors.currency}
                     hint={form.merchantId ? "Follows the merchant" : undefined}
-                  >
-                    <Select
-                      value={form.currency}
-                      onValueChange={(v) => set({ currency: v as Currency })}
-                      disabled={Boolean(form.merchantId)}
-                    >
-                      <SelectTrigger
-                        id="card-currency"
-                        className="w-full py-1.5"
-                        hasError={Boolean(errors.currency)}
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CURRENCIES.map((c) => (
-                          <SelectItem key={c} value={c}>
-                            {c}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
+                    disabled={Boolean(form.merchantId)}
+                  />
                 </div>
               </div>
 
-              <Field id="card-category" label="Category lock">
-                <Select
-                  value={form.category}
-                  onValueChange={(v) => set({ category: v as MerchantCategory })}
-                >
-                  <SelectTrigger id="card-category" className="w-full py-1.5">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(CATEGORY_LABELS) as MerchantCategory[]).map(
-                      (c) => (
-                        <SelectItem key={c} value={c}>
-                          {CATEGORY_LABELS[c]}
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
-              </Field>
+              <Choice
+                id="card-category"
+                label="Category lock"
+                value={form.category}
+                onChange={(v) => set({ category: v as MerchantCategory })}
+                options={Object.entries(CATEGORIES)}
+              />
 
               {formError && (
                 <p
                   className="flex items-start gap-2 text-sm text-red-600 dark:text-red-500"
                   role="alert"
                 >
-                  <TriangleAlert
-                    className="mt-0.5 size-4 shrink-0"
-                    aria-hidden="true"
-                  />
+                  <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
                   {formError}
                 </p>
               )}

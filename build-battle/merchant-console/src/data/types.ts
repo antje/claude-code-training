@@ -74,7 +74,7 @@ export interface Payout {
 /** Virtual card status. `active` and `frozen` interconvert; `cancelled` is terminal. */
 export type CardStatus = "active" | "frozen" | "cancelled"
 
-/** Spend categories a card can be locked to at issue time. */
+/** Categories a card can be locked to at issue. */
 export type MerchantCategory =
   | "advertising"
   | "software"
@@ -82,7 +82,7 @@ export type MerchantCategory =
   | "contractors"
   | "any"
 
-/** One entry in a card's status history. Append-only; nothing is ever rewritten. */
+/** Append-only; nothing is ever rewritten. */
 export interface CardEvent {
   /** ISO 8601, always UTC. */
   at: string
@@ -92,20 +92,16 @@ export interface CardEvent {
 }
 
 /**
- * A virtual card.
- *
- * There is deliberately **no field for the full card number**. It exists only
- * in the creation response and is never stored, so there is nowhere for it to
- * leak from later. See `.claude/rules/cards.md`.
+ * Deliberately **no field for the full card number**: it exists only in the
+ * creation response, so there is nowhere for it to leak from later.
  */
 export interface Card {
   id: string
-  /** Human label ops gives the card, e.g. "Ad spend Q3". */
   nickname: string
   merchantId: string
-  /** Last four of the generated number. The only digits that survive issue. */
+  /** The only digits that survive issue. */
   last4: string
-  /** Opaque handle for the generated number. Not the number, not derivable from it. */
+  /** Opaque handle; not derivable from the digits. */
   reference: string
   /** Integer minor units. Never a float. */
   spendLimit: number
@@ -114,15 +110,9 @@ export interface Card {
   category: MerchantCategory
   /** ISO 8601, always UTC. */
   createdAt: string
-  /**
-   * Every status this card has held, oldest first, starting with its issue.
-   * Answers "what happened to this card last Tuesday" without a database.
-   */
+  /** Every status held, oldest first — "what happened last Tuesday", no database. */
   history: CardEvent[]
-  /**
-   * The idempotency key this card was issued under, if the caller sent one.
-   * Lets a retried request return the existing card instead of a second one.
-   */
+  /** Lets a retried request return this card instead of minting a second. */
   idempotencyKey?: string
 }
 

@@ -17,12 +17,7 @@ import Link from "next/link"
 import { CardActions } from "./card-actions"
 import { IssueCardDialog } from "./issue-dialog"
 
-/**
- * Virtual cards (NWP-201).
- *
- * Nothing here has access to a full card number — the records simply do not
- * carry one. Every number on this page is `•••• last4`.
- */
+/** Nothing here can access a full number — records do not carry one. */
 export default function CardsPage() {
   const cards = listCards()
 

@@ -7,12 +7,9 @@ import {
 import { NextRequest, NextResponse } from "next/server"
 
 /**
- * Virtual cards (NWP-201).
- *
- * GET  — every issued card. Records carry `last4` only; there is no field on a
- *        card for a full number, so this response cannot leak one.
- * POST — issue a card. The full number appears in this response and nowhere
- *        else, ever. It is not stored and cannot be read back.
+ * GET  — every issued card. Records carry `last4` only; there is no field for a
+ *        full number, so this cannot leak one.
+ * POST — issue. The full number appears here and nowhere else, ever.
  */
 
 export function GET() {
@@ -38,14 +35,13 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // A retried request must not mint a second card. Ops clicking twice on a slow
-  // connection is the exact scenario the wrong-limit incident came from.
+  // A retry must not mint a second card — ops clicking twice on a slow
+  // connection is how the wrong-limit incident started.
   const idempotencyKey = request.headers.get("idempotency-key") ?? undefined
   if (idempotencyKey) {
     const existing = cardByIdempotencyKey(idempotencyKey)
     if (existing) {
-      // 200, not 201 — nothing was created. The number is not replayed:
-      // reveal-once means once, even on a retry.
+      // 200, not 201 — nothing was created, and the number is not replayed.
       return NextResponse.json(
         { card: existing, alreadyIssued: true },
         { status: 200 },
