@@ -71,6 +71,42 @@ export interface Payout {
   paymentIds: string[]
 }
 
+/** Virtual card status. `active` and `frozen` interconvert; `cancelled` is terminal. */
+export type CardStatus = "active" | "frozen" | "cancelled"
+
+/** Spend categories a card can be locked to at issue time. */
+export type MerchantCategory =
+  | "advertising"
+  | "software"
+  | "travel"
+  | "contractors"
+  | "any"
+
+/**
+ * A virtual card.
+ *
+ * There is deliberately **no field for the full card number**. It exists only
+ * in the creation response and is never stored, so there is nowhere for it to
+ * leak from later. See `.claude/rules/cards.md`.
+ */
+export interface Card {
+  id: string
+  /** Human label ops gives the card, e.g. "Ad spend Q3". */
+  nickname: string
+  merchantId: string
+  /** Last four of the generated number. The only digits that survive issue. */
+  last4: string
+  /** Opaque handle for the generated number. Not the number, not derivable from it. */
+  reference: string
+  /** Integer minor units. Never a float. */
+  spendLimit: number
+  currency: Currency
+  status: CardStatus
+  category: MerchantCategory
+  /** ISO 8601, always UTC. */
+  createdAt: string
+}
+
 export interface PaymentFilters {
   status?: PaymentStatus | "all"
   merchantId?: string
