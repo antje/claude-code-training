@@ -37,6 +37,8 @@ export function CardActions({
     )
   }
 
+  const working = busy || pending
+
   const move = async (to: CardStatus) => {
     setBusy(true)
     setError(null)
@@ -59,8 +61,6 @@ export function CardActions({
       setBusy(false)
     }
   }
-
-  const working = busy || pending
 
   if (confirming) {
     return (
@@ -90,7 +90,6 @@ export function CardActions({
 
   const thaw = status === "frozen"
   const FreezeIcon = thaw ? Sun : Snowflake
-  const freezeLabel = thaw ? "Unfreeze" : "Freeze"
 
   return (
     <div className="flex items-center gap-2">
@@ -99,10 +98,10 @@ export function CardActions({
         className="gap-1.5 py-1"
         onClick={() => move(thaw ? "active" : "frozen")}
         disabled={working}
-        aria-label={`${freezeLabel} card ${id}`}
+        aria-label={`${thaw ? "Unfreeze" : "Freeze"} card ${id}`}
       >
         <FreezeIcon className="-ml-0.5 size-3.5 shrink-0" aria-hidden="true" />
-        {working ? "Working…" : freezeLabel}
+        {working ? "Working…" : thaw ? "Unfreeze" : "Freeze"}
       </Button>
 
       <Button
