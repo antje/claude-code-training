@@ -78,7 +78,15 @@ export function ExportDialog({
   const empty = selected.length === 0
 
   const href = () => {
-    const params = new URLSearchParams(scope === "all" ? "" : query)
+    const params = new URLSearchParams(query)
+    // Scope "all" drops the filters but keeps the ordering: sort is how the
+    // table is read, not what it contains. Pagination never applied to the
+    // export in the first place.
+    if (scope === "all") {
+      for (const key of ["status", "merchantId", "search", "from", "to"]) {
+        params.delete(key)
+      }
+    }
     params.delete("page")
     params.set("scope", scope)
     params.set("columns", selected.join(","))
