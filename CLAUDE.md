@@ -37,3 +37,11 @@ Work is submitted as a pull request against this repository and scored automatic
 - Branch from `main` with the ticket ID: `NWP-201-issue-cards`
 - Commit subjects carry the ticket ID: `NWP-201: issue virtual cards`
 - Fill in the pull request template. The grader reads it.
+
+## Release Standards
+
+- **Test evidence before merging.** Every change carries proof it works: `npm test` output, or the
+  command and result you ran by hand. "Looks right" is not evidence.
+- **No direct commits to `main`.** Branch from `main` with the ticket ID, open a PR, let the grader read it.
+- **Every PR includes a one-line business impact summary.** Who this helps and what it saves them —
+  in plain language, above the technical detail.
