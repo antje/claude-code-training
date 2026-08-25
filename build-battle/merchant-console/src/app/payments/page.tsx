@@ -10,12 +10,12 @@ import {
 } from "@/components/Table"
 import { StatusBadge } from "@/components/ui/payments/StatusBadge"
 import { merchantById, merchants } from "@/data/merchants"
-import { queryPayments } from "@/data/queries"
+import { filterPayments, queryPayments } from "@/data/queries"
 import { PaymentFilters, PaymentStatus } from "@/data/types"
 import { formatDate } from "@/lib/dates"
 import { formatMoney } from "@/lib/money"
-import { Download } from "lucide-react"
 import Link from "next/link"
+import { ExportDialog } from "./export-dialog"
 import { PaymentsFilterBar } from "./filter-bar"
 
 const STATUSES: (PaymentStatus | "all")[] = [
@@ -47,6 +47,12 @@ export default async function PaymentsPage({
     Object.entries(params).filter(([, v]) => Boolean(v)) as [string, string][],
   )
 
+  // The export dialog shows both row counts before ops commits to a download.
+  // Both come from the one query builder, so the numbers cannot drift from the
+  // file the server will actually produce.
+  const totalCount = filterPayments({}).length
+  const filterSummary = describeFilters(filters)
+
   const pageHref = (next: number) => {
     const q = new URLSearchParams(query)
     q.set("page", String(next))
@@ -65,15 +71,12 @@ export default async function PaymentsPage({
             search: filters.search ?? "",
           }}
         />
-        <Button variant="secondary" className="w-full gap-2 py-1.5 sm:w-fit" asChild>
-          <a href={`/api/payments/export?${query.toString()}`}>
-            <Download
-              className="-ml-0.5 size-4 shrink-0 text-gray-400 dark:text-gray-600"
-              aria-hidden="true"
-            />
-            Export
-          </a>
-        </Button>
+        <ExportDialog
+          query={query.toString()}
+          filteredCount={total}
+          totalCount={totalCount}
+          filterSummary={filterSummary}
+        />
       </div>
 
       <TableRoot className="border-t border-gray-200 dark:border-gray-800">
@@ -157,4 +160,15 @@ export default async function PaymentsPage({
       </div>
     </section>
   )
+}
+
+/** Plain-language name for the filter the table is under, for the scope label. */
+function describeFilters(filters: PaymentFilters): string {
+  const parts: string[] = []
+  if (filters.status && filters.status !== "all") parts.push(filters.status)
+  if (filters.merchantId) {
+    parts.push(merchantById(filters.merchantId)?.name ?? filters.merchantId)
+  }
+  if (filters.search) parts.push(`search "${filters.search}"`)
+  return parts.length > 0 ? parts.join(" · ") : "no filter"
 }
