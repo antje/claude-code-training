@@ -7,7 +7,7 @@ import {
 import { merchantById } from "./merchants"
 import { filterPayments } from "./queries"
 import { store } from "./store"
-import { Card, CardStatus, Currency, MerchantCategory } from "./types"
+import { Card, CardEvent, CardStatus, Currency, MerchantCategory } from "./types"
 
 /**
  * The card store boundary.
@@ -109,10 +109,20 @@ export function parseIssueRequest(body: unknown): ParseResult {
   }
 
   const currency = raw.currency
+  const merchant = merchantById(merchantId)
   if (!CARD_CURRENCIES.includes(currency as Currency)) {
     errors.push({
       field: "currency",
       message: "Currency must be USD, EUR or GBP.",
+    })
+  } else if (merchant && currency !== merchant.currency) {
+    // A card settles with its merchant. Issuing in another currency would make
+    // every spend-against-limit comparison a cross-currency one, which
+    // `src/lib/money.ts` calls meaningless. Enforced here, not only defaulted
+    // in the form, because the client is not trusted.
+    errors.push({
+      field: "currency",
+      message: `${merchant.name} settles in ${merchant.currency}; a card for them must be ${merchant.currency}.`,
     })
   }
 
@@ -156,8 +166,10 @@ function nextCardId(): string {
 export function issueCard(
   request: IssueCardRequest,
   now = new Date(),
+  idempotencyKey?: string,
 ): { card: Card; fullNumber: string } {
   const fullNumber = generateCardNumber()
+  const at = now.toISOString()
 
   const card: Card = {
     id: nextCardId(),
@@ -169,11 +181,24 @@ export function issueCard(
     currency: request.currency,
     status: "active",
     category: request.category,
-    createdAt: now.toISOString(),
+    createdAt: at,
+    history: [{ at, from: null, to: "active" }],
+    ...(idempotencyKey ? { idempotencyKey } : {}),
   }
 
   store.cards.unshift(card)
   return { card, fullNumber }
+}
+
+/**
+ * A card already issued under this idempotency key, if any.
+ *
+ * A retried POST must not mint a second card. The full number is deliberately
+ * **not** replayed — reveal-once means once, so a retry gets the record and a
+ * flag saying it already existed.
+ */
+export function cardByIdempotencyKey(key: string): Card | null {
+  return store.cards.find((card) => card.idempotencyKey === key) ?? null
 }
 
 /** Every issued card, newest first. Masked by construction — there is no number to hide. */
@@ -212,6 +237,7 @@ export function setCardStatus(id: string, to: CardStatus): TransitionResult {
     }
   }
 
+  card.history.push({ at: new Date().toISOString(), from: card.status, to })
   card.status = to
   return { ok: true, card }
 }

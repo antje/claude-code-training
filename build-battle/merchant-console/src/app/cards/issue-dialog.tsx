@@ -65,6 +65,15 @@ export function IssueCardDialog({
   const [errors, setErrors] = useState<FieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
 
+  /**
+   * One key per attempt at issuing a card, minted when the dialog opens.
+   * A double-click or a retry on a slow connection reuses it, so the server
+   * returns the card already issued instead of minting a second one.
+   */
+  const [idempotencyKey, setIdempotencyKey] = useState(() =>
+    globalThis.crypto.randomUUID(),
+  )
+
   /** Set only on success, cleared when the dialog closes. The one-time reveal. */
   const [issued, setIssued] = useState<{ card: Card; fullNumber: string } | null>(
     null,
@@ -87,6 +96,8 @@ export function IssueCardDialog({
     setOpen(next)
     // Closing drops the full number from client state. It is not recoverable.
     if (!next) reset()
+    // A new attempt gets a new key; the same attempt keeps its own.
+    if (next) setIdempotencyKey(globalThis.crypto.randomUUID())
   }
 
   /** Picking a merchant defaults the currency to the one they settle in. */
@@ -113,7 +124,10 @@ export function IssueCardDialog({
     try {
       const response = await fetch("/api/cards", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": idempotencyKey,
+        },
         body: JSON.stringify({
           nickname,
           merchantId,
@@ -133,6 +147,16 @@ export function IssueCardDialog({
         setFormError(
           payload.errors?.length ? null : (payload.message ?? "Could not issue the card."),
         )
+        return
+      }
+
+      if (payload.alreadyIssued) {
+        // A retry of this same attempt. The card exists; the number is not
+        // replayed, because reveal-once means once.
+        setFormError(
+          `This card was already issued as ${payload.card.nickname} (•••• ${payload.card.last4}). The full number was shown then and cannot be shown again.`,
+        )
+        router.refresh()
         return
       }
 
@@ -292,6 +316,7 @@ export function IssueCardDialog({
                   <Select
                     value={currency}
                     onValueChange={(v) => setCurrency(v as Currency)}
+                    disabled={Boolean(merchantId)}
                   >
                     <SelectTrigger
                       id="card-currency"
@@ -312,6 +337,12 @@ export function IssueCardDialog({
               </div>
               {(errors.spendLimit || errors.currency) && (
                 <FieldMessage>{errors.spendLimit ?? errors.currency}</FieldMessage>
+              )}
+              {merchantId && !errors.currency && (
+                <p className="-mt-2 text-xs text-gray-500">
+                  A card settles in its merchant&rsquo;s currency, so this
+                  follows the merchant.
+                </p>
               )}
 
               <div>

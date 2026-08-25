@@ -1,4 +1,9 @@
-import { issueCard, listCards, parseIssueRequest } from "@/data/cards"
+import {
+  cardByIdempotencyKey,
+  issueCard,
+  listCards,
+  parseIssueRequest,
+} from "@/data/cards"
 import { NextRequest, NextResponse } from "next/server"
 
 /**
@@ -33,7 +38,22 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const { card, fullNumber } = issueCard(parsed.value)
+  // A retried request must not mint a second card. Ops clicking twice on a slow
+  // connection is the exact scenario the wrong-limit incident came from.
+  const idempotencyKey = request.headers.get("idempotency-key") ?? undefined
+  if (idempotencyKey) {
+    const existing = cardByIdempotencyKey(idempotencyKey)
+    if (existing) {
+      // 200, not 201 — nothing was created. The number is not replayed:
+      // reveal-once means once, even on a retry.
+      return NextResponse.json(
+        { card: existing, alreadyIssued: true },
+        { status: 200 },
+      )
+    }
+  }
+
+  const { card, fullNumber } = issueCard(parsed.value, new Date(), idempotencyKey)
 
   // The one and only time the full number is returned. Reveal once, mask forever.
   return NextResponse.json({ card, fullNumber }, { status: 201 })

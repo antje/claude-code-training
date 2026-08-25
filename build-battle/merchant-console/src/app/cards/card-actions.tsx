@@ -2,16 +2,18 @@
 
 import { Button } from "@/components/Button"
 import { CardStatus } from "@/data/types"
-import { Snowflake, Sun, TriangleAlert } from "lucide-react"
+import { Ban, Snowflake, Sun, TriangleAlert } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
 /**
- * Freeze and unfreeze a card in place.
+ * Freeze, unfreeze and cancel a card in place.
  *
  * `router.refresh()` re-renders the server component with fresh data without a
  * full page reload, so the row updates where it stands. The server still guards
- * the transition — this only decides which button to show.
+ * every transition — this only decides which buttons to show.
+ *
+ * Cancel asks first, because `cancelled` is terminal and there is no undo.
  */
 export function CardActions({
   id,
@@ -26,6 +28,7 @@ export function CardActions({
   const [pending, startTransition] = useTransition()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
 
   // Cancelled is terminal, so there is nothing to offer.
   if (status === "cancelled") {
@@ -34,22 +37,21 @@ export function CardActions({
     )
   }
 
-  const next: CardStatus = status === "active" ? "frozen" : "active"
-
-  const move = async () => {
+  const move = async (to: CardStatus) => {
     setBusy(true)
     setError(null)
     try {
       const response = await fetch(`/api/cards/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: next }),
+        body: JSON.stringify({ status: to }),
       })
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
         setError(payload.message ?? "Could not update the card.")
         return
       }
+      setConfirming(false)
       startTransition(() => router.refresh())
     } catch {
       setError("Could not reach the server.")
@@ -58,21 +60,62 @@ export function CardActions({
     }
   }
 
-  const label = next === "frozen" ? "Freeze" : "Unfreeze"
-  const Icon = next === "frozen" ? Snowflake : Sun
+  const working = busy || pending
+
+  if (confirming) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-gray-900 dark:text-gray-50">
+          Cancel permanently?
+        </span>
+        <Button
+          variant="destructive"
+          className="py-1"
+          onClick={() => move("cancelled")}
+          disabled={working}
+        >
+          {working ? "Cancelling…" : "Yes, cancel"}
+        </Button>
+        <Button
+          variant="secondary"
+          className="py-1"
+          onClick={() => setConfirming(false)}
+          disabled={working}
+        >
+          Keep
+        </Button>
+      </div>
+    )
+  }
+
+  const thaw = status === "frozen"
+  const FreezeIcon = thaw ? Sun : Snowflake
+  const freezeLabel = thaw ? "Unfreeze" : "Freeze"
 
   return (
     <div className="flex items-center gap-2">
       <Button
         variant="secondary"
         className="gap-1.5 py-1"
-        onClick={move}
-        disabled={busy || pending}
-        aria-label={`${label} card ${id}`}
+        onClick={() => move(thaw ? "active" : "frozen")}
+        disabled={working}
+        aria-label={`${freezeLabel} card ${id}`}
       >
-        <Icon className="-ml-0.5 size-3.5 shrink-0" aria-hidden="true" />
-        {busy || pending ? "Working…" : label}
+        <FreezeIcon className="-ml-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        {working ? "Working…" : freezeLabel}
       </Button>
+
+      <Button
+        variant="secondary"
+        className="gap-1.5 py-1"
+        onClick={() => setConfirming(true)}
+        disabled={working}
+        aria-label={`Cancel card ${id}`}
+      >
+        <Ban className="-ml-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        Cancel
+      </Button>
+
       {error && (
         <span
           className="flex items-center gap-1 text-xs text-red-600 dark:text-red-500"

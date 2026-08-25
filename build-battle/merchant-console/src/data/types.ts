@@ -82,6 +82,15 @@ export type MerchantCategory =
   | "contractors"
   | "any"
 
+/** One entry in a card's status history. Append-only; nothing is ever rewritten. */
+export interface CardEvent {
+  /** ISO 8601, always UTC. */
+  at: string
+  /** Null on the issue event — the card did not exist before it. */
+  from: CardStatus | null
+  to: CardStatus
+}
+
 /**
  * A virtual card.
  *
@@ -105,6 +114,16 @@ export interface Card {
   category: MerchantCategory
   /** ISO 8601, always UTC. */
   createdAt: string
+  /**
+   * Every status this card has held, oldest first, starting with its issue.
+   * Answers "what happened to this card last Tuesday" without a database.
+   */
+  history: CardEvent[]
+  /**
+   * The idempotency key this card was issued under, if the caller sent one.
+   * Lets a retried request return the existing card instead of a second one.
+   */
+  idempotencyKey?: string
 }
 
 export interface PaymentFilters {

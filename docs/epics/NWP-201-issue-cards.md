@@ -160,8 +160,20 @@ Sequenced so each step ends somewhere verifiable.
 
 Persistence (NWP-203), auth/roles, real card network calls, editing a limit after issue (NWP-202).
 
-## Open questions
+## Resolved during the build
 
-- Should a card's currency be forced to its merchant's currency? Assumed **no** — the ticket lists
-  currency as a user choice and validates it independently, so the merchant's currency is offered as
-  the default and the user may override. Cheap to tighten.
+- **Should a card's currency be forced to its merchant's currency?** Opened as a question, closed as
+  **yes**. `merchants.ts` carries a `currency` per merchant, and card spend is compared against a
+  limit — so a card settling in a currency its merchant does not use makes every spend-vs-limit
+  comparison a cross-currency one, which `src/lib/money.ts:38` calls meaningless. Enforced in
+  `parseIssueRequest`, not merely defaulted in the form, because the client is not trusted. The
+  form locks the currency select once a merchant is chosen and says why.
+
+- **What should a retried issue request do?** Ops clicking twice on a slow connection is exactly how
+  the wrong-limit incident started. `POST /api/cards` accepts an `Idempotency-Key` header; a repeat
+  returns `200` with the existing card and **no** `fullNumber`, because reveal-once means once even
+  on a retry. A `201` with a replayed number would be a second reveal.
+
+- **How does ops answer "what happened to this card last Tuesday"?** Each card carries an
+  append-only `history: CardEvent[]`, opened by its issue event and appended on every accepted
+  transition. A refused transition writes nothing. Rendered newest-first on the detail page.
